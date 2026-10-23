@@ -7,7 +7,7 @@
  * NUNCA pongas aquí la llave "service_role".
  */
 window.CONFIG = {
-  SUPABASE_URL: 'https://TU-PROYECTO.supabase.co',
+  SUPABASE_URL: 'https://gabysalon44-ux.github.io/gaby-salon/',
   SUPABASE_KEY: 'sb_publishable_igxqc1xWt7pRsZRPfgNEqQ_rv5Yf-GP',
 
   // Los usuarios entran con nombre de usuario + PIN. Por dentro Supabase
