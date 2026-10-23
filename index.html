@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7A1F4E">
+  <title>Gaby's Salón</title>
+  <link rel="icon" type="image/png" href="img/logo.png">
+  <link rel="apple-touch-icon" href="img/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="css/estilos.css" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Carga inicial -->
+  <div id="pantalla-carga" class="pantalla-centro">
+    <img src="img/logo.png" alt="" class="logo-grande">
+    <div class="barra-carga"><span></span></div>
+  </div>
+
+  <!-- Ingreso -->
+  <div id="pantalla-login" class="pantalla-centro oculto"></div>
+
+  <!-- Aplicación -->
+  <div id="app" class="oculto">
+    <header class="barra">
+      <a href="#/inicio" class="barra-logo" title="Inicio"><img src="img/logo.png" alt="Inicio"></a>
+      <nav id="barra-nav" class="barra-nav"></nav>
+      <div class="barra-derecha">
+        <span id="chip-caja" class="chip-caja"></span>
+        <button id="btn-usuario" class="btn-usuario" type="button">
+          <span id="usuario-inicial" class="avatar"></span>
+          <span id="usuario-nombre" class="usuario-nombre"></span>
+          <i class="bi bi-chevron-down"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="subbarra">
+      <a href="#/inicio" id="btn-volver" class="btn-volver"><i class="bi bi-grid-3x3-gap-fill"></i> Inicio</a>
+      <h1 id="titulo-vista"></h1>
+    </div>
+
+    <main id="vista" class="vista"></main>
+  </div>
+
+  <div id="avisos" class="avisos" aria-live="polite"></div>
+  <div id="capa-modal"></div>
+  <iframe id="marco-impresion" title="Impresión" class="oculto"></iframe>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/impresion.js"></script>
+  <script src="js/vistas/inicio.js"></script>
+  <script src="js/vistas/cobrar.js"></script>
+  <script src="js/vistas/agenda.js"></script>
+  <script src="js/vistas/caja.js"></script>
+  <script src="js/vistas/ventas.js"></script>
+  <script src="js/vistas/creditos.js"></script>
+  <script src="js/vistas/clientes.js"></script>
+  <script src="js/vistas/productos.js"></script>
+  <script src="js/vistas/inventario.js"></script>
+  <script src="js/vistas/catalogos.js"></script>
+  <script src="js/vistas/usuarios.js"></script>
+  <script>App.iniciar();</script>
+</body>
+</html>
