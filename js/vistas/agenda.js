@@ -1,34 +1,47 @@
 /* ==========================================================================
-   Agenda: citas del día. En pantalla grande, una columna por empleado;
-   en teléfono, una lista por hora. Tocar un espacio vacío crea una cita.
+   Agenda: citas por día, semana o mes, con el total de citas al pie.
+   Día: en pantalla grande, una columna por empleado; en teléfono, una lista
+   por hora. Tocar un espacio vacío crea una cita.
+   Semana y mes: tocar un día abre ese día.
    ========================================================================== */
 
-const Agenda = { fecha: null };
+const Agenda = { fecha: null, modo: 'dia' };
 const ESTADOS_CITA = {
   Pendiente: ['', 'Pendiente'], Confirmada: ['verde', 'Confirmada'], Completada: ['azul', 'Completada'],
   Cancelada: ['gris', 'Cancelada'], No_Asistio: ['rojo', 'No asistió']
 };
+const MODOS_AGENDA = { dia: 'Hoy', semana: 'Semana', mes: 'Mes' };
+const DIAS_CORTOS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const MIN_FILA = 15;   // cada fila de la cuadrícula son 15 minutos
+
+/** Índice del día de la semana empezando en lunes (0) */
+const diaSemana = (iso) => (Fmt.aFecha(iso).getDay() + 6) % 7;
 
 vista('agenda', {
   titulo: 'Agenda', icono: 'calendar-heart', roles: TODOS,
   async render(cont, params) {
+    if (params.fecha) Agenda.modo = 'dia';
     Agenda.fecha = params.fecha || Agenda.fecha || Fmt.hoy();
     const editable = puede(MOSTRADOR);
+    const [desde, hasta] = this.rango();
+    const paso = { dia: 'Día', semana: 'Semana', mes: 'Mes' }[Agenda.modo];
     cont.innerHTML = `
+      <div class="pestanas agenda-modos">${Object.entries(MODOS_AGENDA).map(([m, t]) =>
+        `<button class="pestana ${m === Agenda.modo ? 'activa' : ''}" data-modo="${m}">${t}</button>`).join('')}</div>
       <div class="agenda-nav">
-        <button class="btn-icono" id="ag-ant" aria-label="Día anterior"><i class="bi bi-chevron-left"></i></button>
-        <button class="btn chico suave" id="ag-hoy">Hoy</button>
-        <button class="btn-icono" id="ag-sig" aria-label="Día siguiente"><i class="bi bi-chevron-right"></i></button>
+        <button class="btn-icono" id="ag-ant" aria-label="${paso} anterior"><i class="bi bi-chevron-left"></i></button>
+        <button class="btn-icono" id="ag-sig" aria-label="${paso} siguiente"><i class="bi bi-chevron-right"></i></button>
         <input type="date" id="ag-fecha" value="${Agenda.fecha}" aria-label="Fecha">
-        <span class="agenda-fecha crece">${h(Fmt.fechaLarga(Agenda.fecha))}</span>
+        <span class="agenda-fecha crece">${h(this.tituloPeriodo(desde, hasta))}</span>
         ${editable ? '<button class="btn" id="ag-nueva"><i class="bi bi-plus-lg"></i> Nueva cita</button>' : ''}
       </div>
-      <div id="ag-cuerpo"></div>`;
-    const ir = (f) => { Agenda.fecha = f; this.render(cont, {}); };
-    cont.querySelector('#ag-ant').onclick = () => ir(Fmt.sumarDias(Agenda.fecha, -1));
-    cont.querySelector('#ag-sig').onclick = () => ir(Fmt.sumarDias(Agenda.fecha, 1));
-    cont.querySelector('#ag-hoy').onclick = () => ir(Fmt.hoy());
+      <div id="ag-cuerpo"></div>
+      <div id="ag-resumen"></div>`;
+    const ir = (f, modo = Agenda.modo) => { Agenda.fecha = f; Agenda.modo = modo; this.render(cont, {}); };
+    cont.querySelectorAll('[data-modo]').forEach(b => b.onclick = () =>
+      b.dataset.modo === 'dia' ? ir(Fmt.hoy(), 'dia') : ir(Agenda.fecha, b.dataset.modo));
+    cont.querySelector('#ag-ant').onclick = () => ir(this.mover(-1));
+    cont.querySelector('#ag-sig').onclick = () => ir(this.mover(1));
     cont.querySelector('#ag-fecha').onchange = (ev) => ev.target.value && ir(ev.target.value);
     if (editable) cont.querySelector('#ag-nueva').onclick = () => this.formulario({ fecha: Agenda.fecha }, () => this.render(cont, {}));
 
@@ -36,10 +49,99 @@ vista('agenda', {
     UI.cargando(cuerpo);
     const citas = await q(sb.from('citas')
       .select('*, cliente:clientes(id,nombre,telefono,credito_habilitado,limite_credito)')
-      .eq('fecha', Agenda.fecha).order('hora_inicio'));
+      .gte('fecha', desde).lte('fecha', hasta).order('fecha').order('hora_inicio'));
     const recargar = () => this.render(cont, {});
-    if (window.matchMedia('(max-width: 700px)').matches) this.lista(cuerpo, citas, recargar);
+    const abrirDia = (f) => ir(f, 'dia');
+    if (Agenda.modo === 'semana') this.semana(cuerpo, citas, desde, recargar, abrirDia);
+    else if (Agenda.modo === 'mes') this.mes(cuerpo, citas, desde, hasta, abrirDia);
+    else if (window.matchMedia('(max-width: 700px)').matches) this.lista(cuerpo, citas, recargar);
     else this.cuadricula(cuerpo, citas, recargar);
+    this.resumen(cont.querySelector('#ag-resumen'), citas);
+  },
+
+  /** [desde, hasta] del periodo visible, en 'YYYY-MM-DD'. La semana va de lunes a domingo. */
+  rango() {
+    const f = Agenda.fecha;
+    if (Agenda.modo === 'semana') { const desde = Fmt.sumarDias(f, -diaSemana(f)); return [desde, Fmt.sumarDias(desde, 6)]; }
+    if (Agenda.modo === 'mes') {
+      const d = Fmt.aFecha(f);
+      return [Fmt.iso(new Date(d.getFullYear(), d.getMonth(), 1)), Fmt.iso(new Date(d.getFullYear(), d.getMonth() + 1, 0))];
+    }
+    return [f, f];
+  },
+
+  /** Fecha del periodo anterior (-1) o siguiente (1) */
+  mover(dir) {
+    if (Agenda.modo === 'mes') { const d = Fmt.aFecha(Agenda.fecha); return Fmt.iso(new Date(d.getFullYear(), d.getMonth() + dir, 1)); }
+    return Fmt.sumarDias(Agenda.fecha, dir * (Agenda.modo === 'semana' ? 7 : 1));
+  },
+
+  tituloPeriodo(desde, hasta) {
+    if (Agenda.modo === 'semana') {
+      const corto = (iso, op) => Fmt.aFecha(iso).toLocaleDateString('es-HN', op);
+      return corto(desde, { day: 'numeric', month: 'short' }) + ' – ' + corto(hasta, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    if (Agenda.modo === 'mes') return Fmt.aFecha(desde).toLocaleDateString('es-HN', { month: 'long', year: 'numeric' });
+    return Fmt.fechaLarga(desde);
+  },
+
+  /** Total de citas del periodo (sin canceladas) y cuántas hay en cada estado */
+  resumen(el, citas) {
+    const activas = citas.filter(c => c.estado !== 'Cancelada').length;
+    const canceladas = citas.length - activas;
+    const periodo = { dia: Agenda.fecha === Fmt.hoy() ? 'hoy' : 'este día', semana: 'esta semana', mes: 'este mes' }[Agenda.modo];
+    const estados = Object.entries(ESTADOS_CITA).map(([k, [clase, texto]]) => {
+      const n = citas.filter(c => c.estado === k).length;
+      return n ? `<span class="etiqueta ${clase}">${texto}: ${n}</span>` : '';
+    }).join('');
+    el.innerHTML = `<div class="agenda-resumen">
+        <div><span class="agenda-total">${activas}</span> ${activas === 1 ? 'cita' : 'citas'} ${periodo}
+          ${canceladas ? '<span class="suave peq">(sin contar canceladas)</span>' : ''}</div>
+        <div class="fila">${estados}</div>
+      </div>`;
+  },
+
+  semana(cuerpo, citas, desde, recargar, abrirDia) {
+    const hoy = Fmt.hoy();
+    let html = '<div class="semana-grid">';
+    for (let i = 0; i < 7; i++) {
+      const f = Fmt.sumarDias(desde, i);
+      const delDia = citas.filter(c => c.fecha === f);
+      const n = delDia.filter(c => c.estado !== 'Cancelada').length;
+      html += `<div class="semana-dia ${f === hoy ? 'hoy' : ''}">
+        <button class="semana-cab" data-f="${f}"><span>${DIAS_CORTOS[i]}</span><b>${Fmt.aFecha(f).getDate()}</b>
+          ${n ? `<span class="etiqueta">${n}</span>` : ''}</button>
+        ${delDia.map(c => {
+          const e = App.datos.empleados.find(x => x.id === c.empleado_id) || {};
+          return `<div class="semana-cita ${c.estado}" data-id="${c.id}" style="border-left-color:${h(e.color || '#9C4F7E')}">
+            <b>${Fmt.hora12(c.hora_inicio.slice(0, 5))}</b> ${h(c.cliente ? c.cliente.nombre : 'Sin cliente')}
+            <div class="suave peq">${h(nombreDe('servicios', c.servicio_id) || 'Servicio')} · ${h(e.nombre || '')}</div></div>`;
+        }).join('') || '<div class="suave peq">Sin citas</div>'}
+      </div>`;
+    }
+    cuerpo.innerHTML = html + '</div>';
+    cuerpo.querySelectorAll('.semana-cab').forEach(b => b.onclick = () => abrirDia(b.dataset.f));
+    cuerpo.querySelectorAll('.semana-cita').forEach(el => el.onclick = () =>
+      this.detalle(citas.find(c => String(c.id) === el.dataset.id), recargar));
+  },
+
+  mes(cuerpo, citas, desde, hasta, abrirDia) {
+    const hoy = Fmt.hoy();
+    let html = '<div class="mes-grid">' + DIAS_CORTOS.map(d => `<div class="mes-cab">${d}</div>`).join('');
+    // Desde el lunes de la primera semana hasta completar la última semana del mes
+    for (let f = Fmt.sumarDias(desde, -diaSemana(desde)); f <= hasta || diaSemana(f) !== 0; f = Fmt.sumarDias(f, 1)) {
+      const delDia = citas.filter(c => c.fecha === f && c.estado !== 'Cancelada');
+      const fuera = f < desde || f > hasta;
+      html += `<button class="mes-dia ${fuera ? 'fuera' : ''} ${f === hoy ? 'hoy' : ''}" data-f="${f}"
+          aria-label="${h(Fmt.fechaLarga(f))}: ${delDia.length} ${delDia.length === 1 ? 'cita' : 'citas'}">
+        <span class="mes-num">${Fmt.aFecha(f).getDate()}</span>
+        ${delDia.length ? `<span class="mes-cuenta">${delDia.length}</span>` : ''}
+        ${delDia.slice(0, 3).map(c => `<span class="mes-nombre">${Fmt.hora(c.hora_inicio)} ${h(c.cliente ? c.cliente.nombre : 'Sin cliente')}</span>`).join('')}
+        ${delDia.length > 3 ? `<span class="mes-nombre">+${delDia.length - 3} más</span>` : ''}
+      </button>`;
+    }
+    cuerpo.innerHTML = html + '</div>';
+    cuerpo.querySelectorAll('.mes-dia').forEach(b => b.onclick = () => abrirDia(b.dataset.f));
   },
 
   lista(cuerpo, citas, recargar) {
